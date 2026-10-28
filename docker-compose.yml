@@ -1,0 +1,24 @@
+services:
+  ice:
+    image: coturn/coturn:4.6.2-alpine
+    container_name: ligament-ice
+    restart: unless-stopped
+    # На Linux рекомендуется network_mode: host для максимальной производительности UDP
+    network_mode: host
+    volumes:
+      - ./turnserver.conf:/etc/coturn/turnserver.conf:ro
+    command:
+      - -c
+      - /etc/coturn/turnserver.conf
+      - --realm=${REALM:-2fa.grando.app}
+      - --external-ip=${EXTERNAL_IP:-5.149.155.214}
+      - --user=${TURN_USER:-ligament}:${TURN_PASSWORD:?Ошибка: задайте TURN_PASSWORD в файле .env}
+
+# Примечание: если network_mode: host недоступен (например, в Docker Desktop на macOS/Windows),
+# закомментируйте 'network_mode: host' выше и раскомментируйте секцию ports ниже:
+#    ports:
+#      - "3478:3478/tcp"
+#      - "3478:3478/udp"
+#      - "5349:5349/tcp"
+#      - "5349:5349/udp"
+#      - "49152-49250:49152-49250/udp"
