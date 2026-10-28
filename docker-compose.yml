@@ -8,11 +8,11 @@ services:
     volumes:
       - ./turnserver.conf:/etc/coturn/turnserver.conf:ro
     command:
-      - -c
-      - /etc/coturn/turnserver.conf
-      - --realm=${REALM:-2fa.grando.app}
-      - --external-ip=${EXTERNAL_IP:-5.149.155.214}
-      - --user=${TURN_USER:-ligament}:${TURN_PASSWORD:?Ошибка: задайте TURN_PASSWORD в файле .env}
+      - "-c"
+      - "/etc/coturn/turnserver.conf"
+      - "--realm=${REALM:-remote.grando.app}"
+      - "--external-ip=${EXTERNAL_IP}"
+      - "--user=${TURN_USER:-ligament}:${TURN_PASSWORD}"
 
 # Примечание: если network_mode: host недоступен (например, в Docker Desktop на macOS/Windows),
 # закомментируйте 'network_mode: host' выше и раскомментируйте секцию ports ниже:
