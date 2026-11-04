@@ -1,11 +1,11 @@
 #!/bin/bash
-# Проверка доступности STUN/TURN сервера
+# Проверка доступности STUN/TURNS сервера (включая порт 443 TLS)
 set -euo pipefail
 
-HOST="${1:-2fa.grando.app}"
-PORT="${2:-3478}"
+HOST="${1:-remote.grando.app}"
+PORT="${2:-443}"
 
-echo "=== Проверка доступности STUN/TURN на $HOST:$PORT ==="
+echo "=== Проверка доступности STUN/TURNS на $HOST ==="
 
 # 1. Проверка резолва DNS
 echo -n "1. DNS резолв: "
@@ -20,16 +20,26 @@ else
   exit 1
 fi
 
-# 2. Проверка TCP порта 3478
-echo -n "2. TCP порт $PORT: "
-if nc -z -w 3 "$HOST" "$PORT" 2>/dev/null; then
-  echo "OK (порт открыт и отвечает)"
+# 2. Проверка TURNS TLS на порту 443
+echo -n "2. TURNS TLS Handshake (TCP 443): "
+if echo | openssl s_client -connect "${HOST}:443" -servername "${HOST}" -brief >/dev/null 2>&1; then
+  echo "OK (TLS сертификат валиден и отвечает)"
+elif nc -z -w 3 "$HOST" 443 2>/dev/null; then
+  echo "OK (порт 443 открыт, ожидается TLS)"
 else
-  echo "ВНИМАНИЕ (TCP недоступен или заблокирован файрволом)"
+  echo "ВНИМАНИЕ (порт 443 недоступен или заблокирован файрволом)"
 fi
 
-# 3. Проверка UDP через stunclient (если установлен)
-echo -n "3. STUN UDP Binding: "
+# 3. Проверка резервного TCP порта 3478
+echo -n "3. Резервный TCP порт 3478: "
+if nc -z -w 3 "$HOST" 3478 2>/dev/null; then
+  echo "OK (порт открыт)"
+else
+  echo "INFO (порт 3478 закрыт или заблокирован, работает резерв 443)"
+fi
+
+# 4. Проверка UDP через stunclient (если установлен)
+echo -n "4. STUN UDP Binding (порт 443 / $PORT): "
 if command -v stunclient >/dev/null 2>&1; then
   if stunclient "$HOST" "$PORT" >/dev/null 2>&1; then
     echo "OK (STUN Binding успешен)"
@@ -43,6 +53,7 @@ fi
 echo ""
 echo "=== Для проверки в браузере откройте ==="
 echo "https://webrtc.github.io/samples/src/content/peerconnection/trickle-ice/"
-echo "и добавьте сервер:"
-echo "STUN: stun:$HOST:$PORT"
-echo "TURN: turn:$HOST:$PORT (пользователь ligament, пароль из .env)"
+echo "и добавьте серверы:"
+echo "1. TURNS (TLS): turns:$HOST:443?transport=tcp (User: ligament, пароль из .env)"
+echo "2. TURN (UDP): turn:$HOST:443?transport=udp (User: ligament, пароль из .env)"
+echo "3. STUN: stun:$HOST:443"

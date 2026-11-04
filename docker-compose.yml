@@ -1,24 +1,71 @@
 services:
+  # 1. Автоматический ACME Let's Encrypt клиент (выпуск и продление)
+  certbot:
+    image: certbot/certbot:latest
+    container_name: ligament-ice-certbot
+    restart: unless-stopped
+    volumes:
+      - certs:/etc/letsencrypt
+    ports:
+      - "80:80/tcp"
+    environment:
+      - REALM=${REALM:-remote.grando.app}
+      - ACME_EMAIL=${ACME_EMAIL:-admin@grando.app}
+    entrypoint: >
+      /bin/sh -c "
+        DOMAIN=$${REALM:-remote.grando.app};
+        EMAIL=$${ACME_EMAIL:-admin@grando.app};
+        echo \"[Certbot] Проверка сертификатов для $$DOMAIN...\";
+        if [ ! -f /etc/letsencrypt/live/$$DOMAIN/fullchain.pem ]; then
+          echo \"[Certbot] Сертификат не найден. Запуск первичного выпуска...\";
+          certbot certonly --standalone --agree-tos --non-interactive --no-eff-email \
+            -m $$EMAIL -d $$DOMAIN --preferred-challenges http;
+          chmod -R 755 /etc/letsencrypt/live /etc/letsencrypt/archive;
+          chmod 644 /etc/letsencrypt/live/$$DOMAIN/privkey.pem;
+        else
+          echo \"[Certbot] Сертификат уже присутствует.\";
+        fi;
+        echo \"[Certbot] Запуск фонового демона авто-продления (каждые 12 часов)...\";
+        trap exit TERM;
+        while :; do
+          certbot renew --quiet --deploy-hook \"chmod -R 755 /etc/letsencrypt/live /etc/letsencrypt/archive && chmod 644 /etc/letsencrypt/live/$$DOMAIN/privkey.pem\";
+          sleep 12h & wait $${!};
+        done;
+      "
+
+  # 2. WebRTC STUN/TURN сервер с TURNS (TLS) на порту 443
   ice:
     image: coturn/coturn:4.6.2-alpine
     container_name: ligament-ice
     restart: unless-stopped
-    # На Linux рекомендуется network_mode: host для максимальной производительности UDP
-    network_mode: host
+    depends_on:
+      - certbot
     volumes:
       - ./turnserver.conf:/etc/coturn/turnserver.conf:ro
-    command:
-      - "-c"
-      - "/etc/coturn/turnserver.conf"
-      - "--realm=${REALM:-remote.grando.app}"
-      - "--external-ip=${EXTERNAL_IP}"
-      - "--user=${TURN_USER:-ligament}:${TURN_PASSWORD}"
+      - certs:/etc/coturn/certs:ro
+    ports:
+      - "443:443/tcp"
+      - "443:443/udp"
+      - "3478:3478/tcp"
+      - "3478:3478/udp"
+      - "5349:5349/tcp"
+      - "5349:5349/udp"
+      - "49152-49250:49152-49250/udp"
+    entrypoint: >
+      /bin/sh -c "
+        DOMAIN=\"${REALM:-remote.grando.app}\";
+        echo \"[Coturn] Ожидание сертификатов Let's Encrypt для $$DOMAIN...\";
+        while [ ! -f /etc/coturn/certs/live/$$DOMAIN/fullchain.pem ]; do
+          sleep 2;
+        done;
+        echo \"[Coturn] Сертификаты готовы! Запуск turnserver на порту 443 (TURNS TLS) + 3478...\";
+        exec turnserver -c /etc/coturn/turnserver.conf \
+          --realm=\"$$DOMAIN\" \
+          --external-ip=\"${EXTERNAL_IP}\" \
+          --user=\"${TURN_USER:-ligament}:${TURN_PASSWORD}\" \
+          --cert=\"/etc/coturn/certs/live/$$DOMAIN/fullchain.pem\" \
+          --pkey=\"/etc/coturn/certs/live/$$DOMAIN/privkey.pem\"
+      "
 
-# Примечание: если network_mode: host недоступен (например, в Docker Desktop на macOS/Windows),
-# закомментируйте 'network_mode: host' выше и раскомментируйте секцию ports ниже:
-#    ports:
-#      - "3478:3478/tcp"
-#      - "3478:3478/udp"
-#      - "5349:5349/tcp"
-#      - "5349:5349/udp"
-#      - "49152-49250:49152-49250/udp"
+volumes:
+  certs:
