@@ -66,17 +66,34 @@ services:
       - -c
       - |
         DOMAIN="${REALM:-remote.grando.app}"
-        echo "[Coturn] Ожидание сертификатов Let's Encrypt для $$DOMAIN..."
-        while [ ! -f "/etc/coturn/certs/live/$$DOMAIN/fullchain.pem" ]; do
-          sleep 2
-        done
-        echo "[Coturn] Сертификаты готовы! Запуск turnserver на порту 443 (TURNS TLS) + 3478..."
-        exec turnserver -c /etc/coturn/turnserver.conf \
-          --realm="$$DOMAIN" \
-          --external-ip="${EXTERNAL_IP}" \
-          --user="${TURN_USER:-ligament}:${TURN_PASSWORD}" \
-          --cert="/etc/coturn/certs/live/$$DOMAIN/fullchain.pem" \
-          --pkey="/etc/coturn/certs/live/$$DOMAIN/privkey.pem"
+        CERT_FILE="/etc/coturn/certs/live/$$DOMAIN/fullchain.pem"
+        KEY_FILE="/etc/coturn/certs/live/$$DOMAIN/privkey.pem"
+
+        if [ -f "$$CERT_FILE" ] && [ -f "$$KEY_FILE" ]; then
+          echo "[Coturn] TLS сертификаты найдены. Запуск с TURNS TLS (порт 443) и STUN/TURN (порт 3478)..."
+          exec turnserver -c /etc/coturn/turnserver.conf \
+            --tls-listening-port=443 \
+            --listening-port=3478 \
+            --realm="$$DOMAIN" \
+            $${EXTERNAL_IP:+--external-ip="$$EXTERNAL_IP"} \
+            --user="$${TURN_USER:-ligament}:$${TURN_PASSWORD}" \
+            --cert="$$CERT_FILE" \
+            --pkey="$$KEY_FILE"
+        else
+          echo "[Coturn] ВНИМАНИЕ: TLS сертификаты не найдены. Запуск в режиме plain STUN/TURN (порт 443 + 3478)..."
+          exec turnserver -c /etc/coturn/turnserver.conf \
+            --listening-port=443 \
+            --alt-listening-port=3478 \
+            --realm="$$DOMAIN" \
+            $${EXTERNAL_IP:+--external-ip="$$EXTERNAL_IP"} \
+            --user="$${TURN_USER:-ligament}:$${TURN_PASSWORD}"
+        fi
+
+    healthcheck:
+      test: ["CMD-SHELL", "nc -z 127.0.0.1 443 || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
 
 volumes:
   certs:

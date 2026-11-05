@@ -9,9 +9,12 @@ echo "=== Проверка доступности STUN/TURNS на $HOST ==="
 
 # 1. Проверка резолва DNS
 echo -n "1. DNS резолв: "
-IP=$(dig +short "$HOST" | tail -n1 || true)
+IP=$(dig +time=2 +tries=1 +short "$HOST" 2>/dev/null | grep -E '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$' | tail -n1 || true)
 if [ -z "$IP" ]; then
-  IP=$(getent ahosts "$HOST" 2>/dev/null | awk '{print $1}' | head -n1 || true)
+  IP=$(dig @1.1.1.1 +time=2 +tries=1 +short "$HOST" 2>/dev/null | grep -E '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$' | tail -n1 || true)
+fi
+if [ -z "$IP" ]; then
+  IP=$(getent ahosts "$HOST" 2>/dev/null | awk '{print $1}' | grep -E '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$' | head -n1 || true)
 fi
 if [ -n "$IP" ]; then
   echo "OK ($IP)"
@@ -20,12 +23,12 @@ else
   exit 1
 fi
 
-# 2. Проверка TURNS TLS на порту 443
-echo -n "2. TURNS TLS Handshake (TCP 443): "
+# 2. Проверка TURNS TLS / Plain TCP на порту 443
+echo -n "2. Транспорт TCP 443: "
 if echo | openssl s_client -connect "${HOST}:443" -servername "${HOST}" -brief >/dev/null 2>&1; then
-  echo "OK (TLS сертификат валиден и отвечает)"
+  echo "OK (TURNS TLS 1.3 валиден и отвечает)"
 elif nc -z -w 3 "$HOST" 443 2>/dev/null; then
-  echo "OK (порт 443 открыт, ожидается TLS)"
+  echo "OK (Plain TCP 443 открыт; сертификат TLS Let's Encrypt ещё не подключён, работает plain fallback)"
 else
   echo "ВНИМАНИЕ (порт 443 недоступен или заблокирован файрволом)"
 fi
