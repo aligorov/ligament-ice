@@ -2,7 +2,7 @@
 # Проверка доступности STUN/TURNS сервера (включая порт 443 TLS)
 set -euo pipefail
 
-HOST="${1:-remote.grando.app}"
+HOST="${1:-turn.example.com}"
 PORT="${2:-443}"
 
 echo "=== Проверка доступности STUN/TURNS на $HOST ==="

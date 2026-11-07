@@ -9,14 +9,14 @@ services:
     ports:
       - "80:80/tcp"
     environment:
-      - REALM=${REALM:-remote.grando.app}
-      - ACME_EMAIL=${ACME_EMAIL:-admin@grando.app}
+      - REALM=${REALM:-turn.example.com}
+      - ACME_EMAIL=${ACME_EMAIL:-admin@example.com}
     entrypoint:
       - /bin/sh
       - -c
       - |
-        DOMAIN="${REALM:-remote.grando.app}"
-        EMAIL="${ACME_EMAIL:-admin@grando.app}"
+        DOMAIN="${REALM:-turn.example.com}"
+        EMAIL="${ACME_EMAIL:-admin@example.com}"
         echo "[Certbot] Проверка сертификатов для $$DOMAIN..."
         if [ ! -f "/etc/letsencrypt/live/$$DOMAIN/fullchain.pem" ]; then
           echo "[Certbot] Сертификат не найден. Запуск первичного выпуска..."
@@ -46,7 +46,7 @@ services:
     depends_on:
       - certbot
     environment:
-      - REALM=${REALM:-remote.grando.app}
+      - REALM=${REALM:-turn.example.com}
       - EXTERNAL_IP=${EXTERNAL_IP}
       - TURN_USER=${TURN_USER:-ligament}
       - TURN_PASSWORD=${TURN_PASSWORD}
@@ -65,7 +65,7 @@ services:
       - /bin/sh
       - -c
       - |
-        DOMAIN="${REALM:-remote.grando.app}"
+        DOMAIN="${REALM:-turn.example.com}"
         CERT_FILE="/etc/coturn/certs/live/$$DOMAIN/fullchain.pem"
         KEY_FILE="/etc/coturn/certs/live/$$DOMAIN/privkey.pem"
 
